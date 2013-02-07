@@ -159,74 +159,54 @@ class FedoraRepository extends AbstractRepository {
    */
   public function ingestObject(NewFedoraObject &$object) {
 
-  /*
-    // we want all the managed datastreams to be uploaded
-    foreach ($object as $ds) {
-      if ($ds->controlGroup == 'M') {
-        $temp = tempnam(sys_get_temp_dir(), 'tuque');
-        $return = $ds->getContent($temp);
-        if ($return === TRUE) {
-          $url = $this->api->m->upload($temp);
-          $ds->setContentFromUrl($url);
-        }
-        unlink($temp);
-      }
-    }
-
-    $dom = new FoxmlDocument($object);
-    $xml = $dom->saveXml();
-    $id = $this->api->m->ingest(array('string' => $xml, 'logMessage' => $object->logMessage));
-    $object = new $this->objectClass($id, $this);
-    $this->cache->set($id, $object);
-    return $object;
-    */
-    $id = $this->api->m->ingest(array('logMessage' => $object->logMessage));
+    // create an empty fedora object
+    $id = $this->api->m->ingest(array('pid' => $object->id,
+                                      'label' => $object->label,
+                                      'logMessage' => $object->logMessage));
     $fedora_object = new $this->objectClass($id, $this);
 
     // copy object level properties to the new object
-    $fedora_object->id = $object->id;
     $fedora_object->state = $object->state;
-    //$fedora_object->createdDate = $object->createdDate;
-    //$fedora_object->lastModifiedDate = $object->lastModifiedDate;
-    $fedora_object->label = $object->label;
+    //$fedora_object->label = $object->label;
     $fedora_object->owner = $object->owner;
     $fedora_object->models = $object->models;
 
     // now we have an empty fedora object with pid=$id
     foreach ($object as $ds) {
       // create the empty datastream that we will populate
-      $dstream = $fedora_object->constructDatastream($ds-id);
+      $dstream = $fedora_object->constructDatastream($ds->id, $ds->controlGroup);
 
       // copy the datastream level properties
-      $dstream->id = $ds->id;
       $dstream->label = $ds->label;
-      $dstream->controlGroup = $ds->controlGroup;
       $dstream->versionable = $ds->versionable;
       $dstream->state = $ds->state;
       $dstream->mimetype = $ds->mimetype;
       $dstream->format = $ds->format;
-      $dstream->size = $ds->size;
-      $dstream->checksum = $ds->checksum; // maybe recalculate this
+      //$dstream->size = $ds->size;
+      //$dstream->checksum = $ds->checksum; // maybe recalculate this
       $dstream->checksumType = $ds->checksumType;
-      $dstream->createdDate = $ds->createdDate; // what about this one
+      //$dstream->createdDate = $ds->createdDate; // what about this one
       //$dstream->content = $ds->content; // this is probably wrong, so lets skip it
-      $dstream->url = $ds->url; // this covers E+R controlGroups
-      $dstream->location = $ds->location;
 
       // now fetch the content depending on the controlGroup of the original datastream
-      if ($ds->controlGroup == 'M' || $ds->conrolGroup == 'X') {
+      if ($ds->controlGroup == 'M' || $ds->controlGroup == 'X') {
         // load the original file
-        $file = $ds->getContent();
+        $file = tempnam(sys_get_temp_dir(), 'tuque');
+        $ds->getContent($file);
         $dstream->setContentFromFile($file); // and place it in the new datastream
         unlink($file);
       }
-      // the case of E/R datastreams is covered in the property copy step
-      // - it copies the URL which is all an E/R datastream is
+      else if ($ds->controlGroup == 'E' || $ds->controlGroup == 'R') {
+        $dstream->url = $ds->url;
+      }
 
-      // finalize the datastream ingest
+      // attach the datastream to the object
       $fedora_object->ingestDatastream($dstream);
     }
 
+    $object = $fedora_object;
+    $this->cache->set($id, $object);
+    return $object;
   }
 
   /**
