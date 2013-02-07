@@ -158,6 +158,8 @@ class FedoraRepository extends AbstractRepository {
    * @todo error handling
    */
   public function ingestObject(NewFedoraObject &$object) {
+
+  /*
     // we want all the managed datastreams to be uploaded
     foreach ($object as $ds) {
       if ($ds->controlGroup == 'M') {
@@ -177,6 +179,54 @@ class FedoraRepository extends AbstractRepository {
     $object = new $this->objectClass($id, $this);
     $this->cache->set($id, $object);
     return $object;
+    */
+    $id = $this->api->m->ingest(array('logMessage' => $object->logMessage));
+    $fedora_object = new $this->objectClass($id, $this);
+
+    // copy object level properties to the new object
+    $fedora_object->id = $object->id;
+    $fedora_object->state = $object->state;
+    //$fedora_object->createdDate = $object->createdDate;
+    //$fedora_object->lastModifiedDate = $object->lastModifiedDate;
+    $fedora_object->label = $object->label;
+    $fedora_object->owner = $object->owner;
+    $fedora_object->models = $object->models;
+
+    // now we have an empty fedora object with pid=$id
+    foreach ($object as $ds) {
+      // create the empty datastream that we will populate
+      $dstream = $fedora_object->constructDatastream($ds-id);
+
+      // copy the datastream level properties
+      $dstream->id = $ds->id;
+      $dstream->label = $ds->label;
+      $dstream->controlGroup = $ds->controlGroup;
+      $dstream->versionable = $ds->versionable;
+      $dstream->state = $ds->state;
+      $dstream->mimetype = $ds->mimetype;
+      $dstream->format = $ds->format;
+      $dstream->size = $ds->size;
+      $dstream->checksum = $ds->checksum; // maybe recalculate this
+      $dstream->checksumType = $ds->checksumType;
+      $dstream->createdDate = $ds->createdDate; // what about this one
+      //$dstream->content = $ds->content; // this is probably wrong, so lets skip it
+      $dstream->url = $ds->url; // this covers E+R controlGroups
+      $dstream->location = $ds->location;
+
+      // now fetch the content depending on the controlGroup of the original datastream
+      if ($ds->controlGroup == 'M' || $ds->conrolGroup == 'X') {
+        // load the original file
+        $file = $ds->getContent();
+        $dstream->setContentFromFile($file); // and place it in the new datastream
+        unlink($file);
+      }
+      // the case of E/R datastreams is covered in the property copy step
+      // - it copies the URL which is all an E/R datastream is
+
+      // finalize the datastream ingest
+      $fedora_object->ingestDatastream($dstream);
+    }
+
   }
 
   /**
