@@ -167,7 +167,6 @@ class FedoraRepository extends AbstractRepository {
 
     // copy object level properties to the new object
     $fedora_object->state = $object->state;
-    //$fedora_object->label = $object->label;
     $fedora_object->owner = $object->owner;
     $fedora_object->models = $object->models;
 
